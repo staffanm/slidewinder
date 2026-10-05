@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx=".3" cy="0" r="1.1">
+      <stop offset="0" stop-color="#2c3170"/><stop offset=".7" stop-color="#13152a"/>
+    </radialGradient>
+    <linearGradient id="g0" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a80"/><stop offset="1" stop-color="#c62828"/></linearGradient>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#82b1ff"/><stop offset="1" stop-color="#1d4fb8"/></linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8af0a6"/><stop offset="1" stop-color="#1b8a43"/></linearGradient>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe57a"/><stop offset="1" stop-color="#c99400"/></linearGradient>
+  </defs>
+  <rect class="bg" width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- An S piece, as a snake that moves to the right. The lines show the slide. -->
+  <g stroke="#ffd54f" stroke-width="14" stroke-linecap="round" opacity=".85">
+    <path d="M96 172h70M120 214h46"/>
+  </g>
+  <svg x="201" y="146" width="104" height="104" viewBox="0 0 32 32">
+    <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="url(#g1)" stroke="#1d4fb8" stroke-width="1.5"/>
+    <rect x="5" y="4" width="22" height="7" rx="3.5" fill="#fff" opacity=".3"/>
+    <path d="M16 9.5 23.5 17 16 24.5 8.5 17Z" fill="#fff" opacity=".85"/>
+  </svg>
+  <svg x="311" y="146" width="104" height="104" viewBox="0 0 32 32">
+    <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="url(#g0)" stroke="#c62828" stroke-width="1.5"/>
+    <rect x="5" y="4" width="22" height="7" rx="3.5" fill="#fff" opacity=".3"/>
+    <circle cx="16" cy="17" r="6" fill="#fff" opacity=".85"/>
+  </svg>
+  <svg x="91" y="256" width="104" height="104" viewBox="0 0 32 32">
+    <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="url(#g3)" stroke="#c99400" stroke-width="1.5"/>
+    <rect x="5" y="4" width="22" height="7" rx="3.5" fill="#fff" opacity=".3"/>
+    <rect x="10.5" y="11.5" width="11" height="11" rx="1.5" fill="#5c4300" opacity=".85"/>
+  </svg>
+  <svg x="201" y="256" width="104" height="104" viewBox="0 0 32 32">
+    <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="url(#g2)" stroke="#1b8a43" stroke-width="1.5"/>
+    <rect x="5" y="4" width="22" height="7" rx="3.5" fill="#fff" opacity=".3"/>
+    <path d="M16 10 23 23H9Z" fill="#fff" opacity=".85"/>
+  </svg>
+  <!-- Joins between the cells of the piece -->
+  <g fill="#fff" opacity=".9">
+    <rect x="298" y="179" width="16" height="38" rx="5"/>
+    <rect x="188" y="289" width="16" height="38" rx="5"/>
+    <rect x="234" y="243" width="38" height="16" rx="5"/>
+  </g>
+</svg>

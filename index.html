@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#13152a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Slidewinder" />
+    <title>Slidewinder</title>
+    <meta name="description" content="Puzzle game: place pieces, slide all tiles as in 2048, and merge and match colors to clear the cores." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Slidewinder" />
+    <meta property="og:description" content="Place pieces, slide all tiles as in 2048, and merge and match colors to clear the cores." />
+    <meta property="og:url" content="https://slidewinder.tomtebo.org/" />
+    <meta property="og:image" content="https://slidewinder.tomtebo.org/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  </head>
+  <body>
+    <main id="app">
+      <div class="board-wrap">
+        <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="overlay" hidden></div>
+      </div>
+      <aside class="panel">
+        <h1>Slidewinder</h1>
+        <dl class="stats">
+          <dt>Score</dt><dd id="score">0</dd>
+          <dt>Level</dt><dd id="level">1</dd>
+          <dt>Cores left</dt><dd id="cores">0</dd>
+          <dt>Chain</dt><dd id="chain">–</dd>
+          <dt>Stones per slide</dt><dd id="stones">1</dd>
+        </dl>
+        <p id="hint" class="hint"></p>
+        <div class="previews">
+          <div>
+            <h2>Piece</h2>
+            <svg id="piece" class="preview"></svg>
+          </div>
+          <div>
+            <h2>Next</h2>
+            <svg id="next0" class="preview"></svg>
+            <svg id="next1" class="preview small"></svg>
+          </div>
+          <div>
+            <h2>Hold</h2>
+            <svg id="hold" class="preview"></svg>
+          </div>
+        </div>
+        <div class="buttons">
+          <button id="rotateBtn">Rotate</button>
+          <button id="holdBtn">Hold</button>
+          <button id="tapBtn">Tap (1)</button>
+          <button id="newBtn">New game</button>
+        </div>
+        <details class="help">
+          <summary>How to play</summary>
+          <p>Remove all tiles with a ring (cores) to clear the level.</p>
+          <ol>
+            <li>Place the piece anywhere it fits.</li>
+            <li>Slide all tiles in one direction. Cores do not move.</li>
+          </ol>
+          <ul>
+            <li>Two tiles of the same color and value that meet merge, and the value doubles.</li>
+            <li>A same-color group whose values add up to 5 or more is removed. The tiles then slide again, which can start a chain.</li>
+            <li>After each slide, gray stones appear on the side the tiles moved away from. More stones come at higher levels.</li>
+            <li>Stones do not match or merge. A match removes the stones next to it.</li>
+            <li>A chain of 2 or more gives a tap. A tap removes any group of 2 or more.</li>
+            <li>The game ends when no piece fits.</li>
+          </ul>
+          <p>Mouse: click to place, wheel to rotate, right-click to tap, drag or click an arrow to slide.<br />
+            Keys: arrows move the piece or slide, Space place, Z/X rotate, C hold, T tap mode.<br />
+            Touch: tap to place, swipe to slide.</p>
+        </details>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
