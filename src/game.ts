@@ -5,19 +5,25 @@ export const SIZE = 8;
 export const MATCH_VALUE = 5;
 /** Color value of a stone. Stones do not match or merge. A match next to a stone removes it. */
 export const STONE = -1;
+/** Seconds per level. */
+export const LEVEL_TIME = 90;
+/** Points per second left when a level is cleared. */
+export const TIME_BONUS = 20;
 const START_FILL = 0.4;
 
-/** Stones added per slide. Fractions add up over turns. */
+/** Stones added per move. Fractions add up over moves. */
 export function stonesPerTurn(level: number): number {
   return 1 + 0.5 * (level - 1);
 }
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type Phase = 'place' | 'swipe' | 'won' | 'lost';
+export type Phase = 'play' | 'won' | 'lost';
 export interface Tile { id: number; color: number; value: number; core: boolean }
 export interface TileView extends Tile { r: number; c: number }
 export interface PieceCell { x: number; y: number; color: number }
 export interface Piece { shape: string; cells: PieceCell[] }
+/** Play the piece in `slot`. It enters from the side opposite `dir`, and all tiles slide toward `dir`. */
+export interface Move { slot: number; dir: Dir; offset: number }
 /** One animation step: where every tile is, and which tiles were removed. */
 export interface Frame {
   tiles: TileView[];
@@ -25,7 +31,11 @@ export interface Frame {
   score?: { points: number; chain: number; r: number; c: number };
 }
 
+type Grid = (Tile | null)[][];
 type Pos = [number, number];
+
+export const DIRS: Dir[] = ['up', 'down', 'left', 'right'];
+const BACK: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
 export function rotated(piece: Piece, dir: 1 | -1): Piece {
   return {
@@ -34,20 +44,39 @@ export function rotated(piece: Piece, dir: 1 | -1): Piece {
   };
 }
 
+/** Lane (row or column) of a piece cell before the offset, and its distance from the board (0 = enters first). */
+function laneOf(cell: PieceCell, dir: Dir): { lane: number; depth: number } {
+  switch (dir) {
+    case 'right': return { lane: cell.y, depth: -cell.x };
+    case 'left': return { lane: cell.y, depth: cell.x };
+    case 'down': return { lane: cell.x, depth: -cell.y };
+    case 'up': return { lane: cell.x, depth: cell.y };
+  }
+}
+
+/** Offsets that keep every lane of the piece on the board. */
+export function offsetRange(piece: Piece, dir: Dir): [number, number] {
+  const lanes = piece.cells.map((c) => laneOf(c, dir).lane);
+  return [-Math.min(...lanes), SIZE - 1 - Math.max(...lanes)];
+}
+
 export class Game {
-  grid: (Tile | null)[][] = [];
+  grid: Grid = [];
   level = 1;
   score = 0;
   chain = 0;
   taps = 1;
   numColors = 4;
-  current!: Piece;
-  next: Piece[] = [];
-  hold: Piece | null = null;
-  holdUsed = false;
-  phase: Phase = 'place';
+  slots: Piece[] = [];
+  next!: Piece;
+  phase: Phase = 'play';
+  lostReason: 'time' | 'blocked' | null = null;
+  timeLeft = LEVEL_TIME;
+  lastBonus = 0;
   /** Increments on every change that the board or panel must show. */
   version = 0;
+  /** Increments when a level starts. */
+  levelStarts = 0;
   private frames: Frame[] = [];
   private nextId = 1;
   private stoneDebt = 0;
@@ -76,102 +105,77 @@ export class Game {
     }
     this.chain = 0;
     this.stoneDebt = 0;
-    this.hold = null;
-    this.holdUsed = false;
-    this.current = this.randomPiece();
-    this.next = [this.randomPiece(), this.randomPiece()];
-    this.phase = 'place';
+    this.timeLeft = LEVEL_TIME;
+    this.lastBonus = 0;
+    this.lostReason = null;
+    this.slots = [this.randomPiece(), this.randomPiece()];
+    this.next = this.randomPiece();
+    this.phase = 'play';
     this.frames.push({ tiles: this.snapshot(), popped: [] });
+    this.levelStarts++;
     this.changed();
+  }
+
+  coreTiles(): Tile[] {
+    return this.grid.flat().filter((t): t is Tile => !!t?.core);
   }
 
   coresLeft(): number {
-    let n = 0;
-    for (const row of this.grid) for (const t of row) if (t?.core) n++;
-    return n;
+    return this.coreTiles().length;
   }
 
-  fits(piece: Piece, r0: number, c0: number): boolean {
-    return piece.cells.every(({ x, y }) => {
-      const r = r0 + y;
-      const c = c0 + x;
-      return r >= 0 && r < SIZE && c >= 0 && c < SIZE && !this.grid[r][c];
-    });
+  tick(dt: number): void {
+    if (this.phase !== 'play') return;
+    const before = Math.ceil(this.timeLeft);
+    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (this.timeLeft === 0) {
+      this.phase = 'lost';
+      this.lostReason = 'time';
+    }
+    if (Math.ceil(this.timeLeft) !== before) this.changed();
   }
 
-  place(r0: number, c0: number): boolean {
-    if (this.phase !== 'place' || !this.fits(this.current, r0, c0)) return false;
-    for (const { x, y, color } of this.current.cells) this.grid[r0 + y][c0 + x] = this.tile(color, 1, false);
-    this.frames.push({ tiles: this.snapshot(), popped: [] });
-    this.current = this.next.shift()!;
-    this.next.push(this.randomPiece());
-    this.holdUsed = false;
-    this.phase = 'swipe';
+  rotateSlot(slot: number, dir: 1 | -1 = 1): void {
+    if (this.phase !== 'play') return;
+    this.slots[slot] = rotated(this.slots[slot], dir);
     this.changed();
+  }
+
+  /** Where the cells of the piece end up, before matches. Null if the piece does not fit. */
+  preview(move: Move): TileView[] | null {
+    const { incoming, ids } = this.incoming(move, true);
+    const result = this.slideGrid(this.grid, move.dir, incoming);
+    if (!result.ok) return null;
+    const out: TileView[] = result.merged.filter((t) => ids.has(t.id));
+    result.grid.forEach((row, r) => row.forEach((t, c) => t && ids.has(t.id) && out.push({ ...t, r, c })));
+    return out;
+  }
+
+  play(move: Move): boolean {
+    if (this.phase !== 'play') return false;
+    const { incoming, views } = this.incoming(move, false);
+    const first = this.slideGrid(this.grid, move.dir, incoming);
+    if (!first.ok) return false;
+    this.frames.push({ tiles: [...this.snapshot(), ...views], popped: [] });
+    this.slots[move.slot] = this.next;
+    this.next = this.randomPiece();
+    this.resolve(move.dir, first);
     return true;
-  }
-
-  /** Slides all tiles, merges equal pairs, then removes matches and slides again until nothing matches. */
-  swipe(dir: Dir): void {
-    if (this.phase !== 'swipe') return;
-    let step = 0;
-    for (;;) {
-      const merged = this.slide(dir);
-      if (merged.length) this.frames.push({ tiles: [...this.snapshot(), ...merged], popped: [] });
-      this.frames.push({ tiles: this.snapshot(), popped: [] });
-      const groups = this.findMatches();
-      if (!groups.length) break;
-      step++;
-      let points = groups.reduce((s, g) => s + this.groupValue(g) * g.length * 10, 0);
-      const removed = this.remove(groups.flat());
-      points = (points + removed.points) * step;
-      const popped = removed.popped;
-      this.score += points;
-      this.frames.push({ tiles: this.snapshot(), popped, score: { points, chain: step, ...this.center(groups.flat()) } });
-    }
-    this.chain = step;
-    if (step >= 2) this.taps++;
-    if (this.coresLeft() === 0) {
-      this.phase = 'won';
-      this.changed();
-      return;
-    }
-    this.addStones(dir);
-    this.phase = this.canPlace(this.current) || (this.hold && this.canPlace(this.hold)) ? 'place' : 'lost';
-    this.changed();
-  }
-
-  rotate(dir: 1 | -1): void {
-    if (this.phase !== 'place') return;
-    this.current = rotated(this.current, dir);
-    this.changed();
-  }
-
-  swapHold(): void {
-    if (this.phase !== 'place' || this.holdUsed) return;
-    if (this.hold) {
-      [this.hold, this.current] = [this.current, this.hold];
-    } else {
-      this.hold = this.current;
-      this.current = this.next.shift()!;
-      this.next.push(this.randomPiece());
-    }
-    this.holdUsed = true;
-    this.changed();
   }
 
   /** Removes any same-color group of 2 or more. Costs one tap charge. */
   tap(r: number, c: number): boolean {
     const t = this.grid[r]?.[c];
-    if (this.phase !== 'place' || this.taps <= 0 || !t || t.color === STONE) return false;
+    if (this.phase !== 'play' || this.taps <= 0 || !t || t.color === STONE) return false;
     const group = this.groupAt(r, c);
     if (group.length < 2) return false;
     this.taps--;
+    const value = this.groupValue(group);
     const { points: extra, popped } = this.remove(group);
-    const points = this.groupValue(group) * group.length * 10 + extra;
+    const points = value * group.length * 10 + extra;
     this.score += points;
     this.frames.push({ tiles: this.snapshot(), popped, score: { points, chain: 1, ...this.center(group) } });
-    if (this.coresLeft() === 0) this.phase = 'won';
+    this.checkWin();
     this.changed();
     return true;
   }
@@ -184,6 +188,146 @@ export class Game {
 
   private changed(): void {
     this.version++;
+  }
+
+  /** Tiles for the piece cells, per lane, nearest the board first. Views place them outside the board edge. */
+  private incoming(move: Move, preview: boolean): { incoming: Map<number, Tile[]>; ids: Set<number>; views: TileView[] } {
+    const lanes = new Map<number, { depth: number; tile: Tile }[]>();
+    let previewId = -1;
+    for (const cell of this.slots[move.slot].cells) {
+      const { lane, depth } = laneOf(cell, move.dir);
+      const tile = preview ? { id: previewId--, color: cell.color, value: 1, core: false } : this.tile(cell.color, 1, false);
+      const list = lanes.get(lane + move.offset) ?? [];
+      list.push({ depth, tile });
+      lanes.set(lane + move.offset, list);
+    }
+    const incoming = new Map<number, Tile[]>();
+    const ids = new Set<number>();
+    const views: TileView[] = [];
+    for (const [lane, list] of lanes) {
+      list.sort((a, b) => a.depth - b.depth);
+      incoming.set(lane, list.map((e) => e.tile));
+      list.forEach(({ tile }, k) => {
+        ids.add(tile.id);
+        const before = -1 - k;
+        const after = SIZE + k;
+        const pos: Record<Dir, Pos> = { right: [lane, before], left: [lane, after], down: [before, lane], up: [after, lane] };
+        const [r, c] = pos[move.dir];
+        views.push({ ...tile, r, c });
+      });
+    }
+    return { incoming, ids, views };
+  }
+
+  /** After the first slide: removes matches and slides again until nothing matches, then adds stones. */
+  private resolve(dir: Dir, first: { grid: Grid; merged: TileView[] }): void {
+    let result = first;
+    let step = 0;
+    for (;;) {
+      this.grid = result.grid;
+      if (result.merged.length) this.frames.push({ tiles: [...this.snapshot(), ...result.merged], popped: [] });
+      this.frames.push({ tiles: this.snapshot(), popped: [] });
+      const groups = this.findMatches();
+      if (!groups.length) break;
+      step++;
+      const value = groups.reduce((s, g) => s + this.groupValue(g) * g.length * 10, 0);
+      const removed = this.remove(groups.flat());
+      const points = (value + removed.points) * step;
+      this.score += points;
+      this.frames.push({ tiles: this.snapshot(), popped: removed.popped, score: { points, chain: step, ...this.center(groups.flat()) } });
+      result = this.slideGrid(this.grid, dir);
+    }
+    this.chain = step;
+    if (step >= 2) this.taps++;
+    if (!this.checkWin()) {
+      this.addStones(dir);
+      if (!this.canPlay()) {
+        this.phase = 'lost';
+        this.lostReason = 'blocked';
+      }
+    }
+    this.changed();
+  }
+
+  private checkWin(): boolean {
+    if (this.coresLeft() > 0) return false;
+    this.lastBonus = Math.ceil(this.timeLeft) * TIME_BONUS;
+    this.score += this.lastBonus;
+    this.phase = 'won';
+    return true;
+  }
+
+  private canPlay(): boolean {
+    const saved = [...this.slots];
+    try {
+      for (let slot = 0; slot < saved.length; slot++) {
+        let piece = saved[slot];
+        for (let rot = 0; rot < 4; rot++, piece = rotated(piece, 1)) {
+          this.slots[slot] = piece;
+          for (const dir of DIRS) {
+            const [lo, hi] = offsetRange(piece, dir);
+            for (let offset = lo; offset <= hi; offset++) if (this.preview({ slot, dir, offset })) return true;
+          }
+        }
+      }
+      return false;
+    } finally {
+      this.slots = saved;
+    }
+  }
+
+  /**
+   * 2048 slide on a copy of the grid. Cores do not move, so they split each line into parts.
+   * Incoming tiles join the part at the back of their lane. Not ok if they do not fit.
+   * Returns the tiles merged away, at their end position.
+   */
+  private slideGrid(grid: Grid, dir: Dir, incoming = new Map<number, Tile[]>()): { grid: Grid; merged: TileView[]; ok: boolean } {
+    const out = grid.map((row) => [...row]);
+    const merged: TileView[] = [];
+    let ok = true;
+    for (let i = 0; i < SIZE; i++) {
+      const line = this.line(dir, i);
+      let s = 0;
+      for (;;) {
+        let e = s;
+        while (e < SIZE && !grid[line[e][0]][line[e][1]]?.core) e++;
+        const tiles: Tile[] = [];
+        for (let k = s; k < e; k++) {
+          const t = grid[line[k][0]][line[k][1]];
+          if (t) tiles.push(t);
+        }
+        if (e === SIZE) tiles.push(...(incoming.get(i) ?? []));
+        const packed: Tile[] = [];
+        let lastMerged = false;
+        for (const t of tiles) {
+          const last = packed[packed.length - 1];
+          if (last && !lastMerged && t.color !== STONE && last.color === t.color && last.value === t.value) {
+            packed[packed.length - 1] = { ...last, value: last.value * 2 };
+            lastMerged = true;
+            const [r, c] = line[Math.min(s + packed.length - 1, SIZE - 1)];
+            merged.push({ ...t, r, c });
+          } else {
+            packed.push(t);
+            lastMerged = false;
+          }
+        }
+        if (packed.length > e - s) ok = false;
+        for (let k = s; k < e; k++) out[line[k][0]][line[k][1]] = packed[k - s] ?? null;
+        if (e >= SIZE) break;
+        s = e + 1;
+      }
+    }
+    return { grid: out, merged, ok };
+  }
+
+  /** Cells of row or column i, starting at the edge that tiles move toward. */
+  private line(dir: Dir, i: number): Pos[] {
+    const out: Pos[] = [];
+    for (let k = 0; k < SIZE; k++) {
+      const j = dir === 'left' || dir === 'up' ? k : SIZE - 1 - k;
+      out.push(dir === 'left' || dir === 'right' ? [i, j] : [j, i]);
+    }
+    return out;
   }
 
   /** Removes the cells and the stones next to them. Returns points for cores and stones. */
@@ -207,19 +351,18 @@ export class Game {
     return { points, popped };
   }
 
-  /** Adds stones on the edge that the tiles moved away from, as 2048 adds a tile after each move. */
+  /** Adds stones on the edge that the piece came in from, as 2048 adds a tile after each move. */
   private addStones(dir: Dir): void {
     this.stoneDebt += stonesPerTurn(this.level);
-    const back: Dir = ({ up: 'down', down: 'up', left: 'right', right: 'left' } as const)[dir];
     let added = 0;
     while (this.stoneDebt >= 1) {
       this.stoneDebt--;
-      // Try the far edge first, then the lines after it.
-      let free: Pos[] = [];
+      // Try the edge first, then the lines after it.
+      const free: Pos[] = [];
       for (let k = 0; k < SIZE && !free.length; k++) {
         for (let i = 0; i < SIZE; i++) {
-          const pos = this.line(back, i)[k];
-          if (!this.at(pos)) free.push(pos);
+          const [r, c] = this.line(BACK[dir], i)[k];
+          if (!this.grid[r][c]) free.push([r, c]);
         }
       }
       if (!free.length) break;
@@ -228,63 +371,6 @@ export class Game {
       added++;
     }
     if (added) this.frames.push({ tiles: this.snapshot(), popped: [] });
-  }
-
-  private canPlace(piece: Piece): boolean {
-    let p = piece;
-    for (let i = 0; i < 4; i++, p = rotated(p, 1)) {
-      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (this.fits(p, r, c)) return true;
-    }
-    return false;
-  }
-
-  /** 2048 slide. Cores do not move, so they split each line into parts. Returns tiles merged away, at their end position. */
-  private slide(dir: Dir): TileView[] {
-    const merged: TileView[] = [];
-    for (let i = 0; i < SIZE; i++) {
-      const line = this.line(dir, i);
-      let s = 0;
-      while (s < SIZE) {
-        let e = s;
-        while (e < SIZE && !this.at(line[e])?.core) e++;
-        const out: Tile[] = [];
-        let lastMerged = false;
-        for (let k = s; k < e; k++) {
-          const t = this.at(line[k]);
-          if (!t) continue;
-          const last = out[out.length - 1];
-          if (last && !lastMerged && t.color !== STONE && last.color === t.color && last.value === t.value) {
-            last.value *= 2;
-            lastMerged = true;
-            const [r, c] = line[s + out.length - 1];
-            merged.push({ ...t, r, c });
-          } else {
-            out.push(t);
-            lastMerged = false;
-          }
-        }
-        for (let k = s; k < e; k++) {
-          const [r, c] = line[k];
-          this.grid[r][c] = out[k - s] ?? null;
-        }
-        s = e + 1;
-      }
-    }
-    return merged;
-  }
-
-  /** Cells of row or column i, starting at the edge that tiles move toward. */
-  private line(dir: Dir, i: number): Pos[] {
-    const out: Pos[] = [];
-    for (let k = 0; k < SIZE; k++) {
-      const j = dir === 'left' || dir === 'up' ? k : SIZE - 1 - k;
-      out.push(dir === 'left' || dir === 'right' ? [i, j] : [j, i]);
-    }
-    return out;
-  }
-
-  private at([r, c]: Pos): Tile | null {
-    return this.grid[r][c];
   }
 
   private findMatches(): Pos[][] {

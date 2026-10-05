@@ -1,8 +1,9 @@
 # Slidewinder
 
-A puzzle game. Place Tetris-shaped pieces, then slide all tiles in one direction as in 2048.
-Same-color tiles that meet merge, and a same-color group with values that add up to 5 or more is removed.
-Remove all cores to clear a level. Gray stones arrive after each slide.
+A puzzle game. Drag a Tetris-shaped piece to a side of the board: it enters from that side,
+and all tiles slide away from you, as in 2048. Same-color tiles that meet merge, and a same-color group
+with values that add up to 5 or more is removed. Remove all cores (bolted to the board) before the
+90-second timer runs out. Gray stones arrive after each move.
 Live at https://slidewinder.tomtebo.org/. It installs as a PWA (Add to Home Screen).
 
 ## Development

@@ -2,17 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#13152a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Slidewinder" />
     <title>Slidewinder</title>
-    <meta name="description" content="Puzzle game: place pieces, slide all tiles as in 2048, and merge and match colors to clear the cores." />
+    <meta name="description" content="Puzzle game: shove pieces onto the board, slide all tiles as in 2048, and merge and match colors to clear the cores against the clock." />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Slidewinder" />
-    <meta property="og:description" content="Place pieces, slide all tiles as in 2048, and merge and match colors to clear the cores." />
+    <meta property="og:description" content="Shove pieces onto the board, slide all tiles as in 2048, and merge and match colors to clear the cores against the clock." />
     <meta property="og:url" content="https://slidewinder.tomtebo.org/" />
     <meta property="og:image" content="https://slidewinder.tomtebo.org/icon-512.png" />
     <meta name="twitter:card" content="summary" />
@@ -23,62 +23,45 @@
   </head>
   <body>
     <main id="app">
+      <header class="hud">
+        <div class="stat"><span>Level</span><b id="level">1</b></div>
+        <div class="stat"><span>Score</span><b id="score">0</b></div>
+        <div class="stat"><span>Cores</span><b id="cores">0</b></div>
+        <button id="helpBtn" class="icon-btn" aria-label="Help and new game">?</button>
+      </header>
+      <div class="timer" role="timer"><div id="timerBar"></div><span id="timerText">1:30</span></div>
       <div class="board-wrap">
         <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="intro" class="intro" aria-live="polite"></div>
         <div id="overlay" hidden></div>
       </div>
-      <aside class="panel">
-        <h1>Slidewinder</h1>
-        <dl class="stats">
-          <dt>Score</dt><dd id="score">0</dd>
-          <dt>Level</dt><dd id="level">1</dd>
-          <dt>Cores left</dt><dd id="cores">0</dd>
-          <dt>Chain</dt><dd id="chain">–</dd>
-          <dt>Stones per slide</dt><dd id="stones">1</dd>
-        </dl>
-        <p id="hint" class="hint"></p>
-        <div class="previews">
-          <div>
-            <h2>Piece</h2>
-            <svg id="piece" class="preview"></svg>
-          </div>
-          <div>
-            <h2>Next</h2>
-            <svg id="next0" class="preview"></svg>
-            <svg id="next1" class="preview small"></svg>
-          </div>
-          <div>
-            <h2>Hold</h2>
-            <svg id="hold" class="preview"></svg>
-          </div>
-        </div>
-        <div class="buttons">
-          <button id="rotateBtn">Rotate</button>
-          <button id="holdBtn">Hold</button>
-          <button id="tapBtn">Tap (1)</button>
-          <button id="newBtn">New game</button>
-        </div>
-        <details class="help">
-          <summary>How to play</summary>
-          <p>Remove all tiles with a ring (cores) to clear the level.</p>
-          <ol>
-            <li>Place the piece anywhere it fits.</li>
-            <li>Slide all tiles in one direction. Cores do not move.</li>
-          </ol>
-          <ul>
-            <li>Two tiles of the same color and value that meet merge, and the value doubles.</li>
-            <li>A same-color group whose values add up to 5 or more is removed. The tiles then slide again, which can start a chain.</li>
-            <li>After each slide, gray stones appear on the side the tiles moved away from. More stones come at higher levels.</li>
-            <li>Stones do not match or merge. A match removes the stones next to it.</li>
-            <li>A chain of 2 or more gives a tap. A tap removes any group of 2 or more.</li>
-            <li>The game ends when no piece fits.</li>
-          </ul>
-          <p>Mouse: click to place, wheel to rotate, right-click to tap, drag or click an arrow to slide.<br />
-            Keys: arrows move the piece or slide, Space place, Z/X rotate, C hold, T tap mode.<br />
-            Touch: tap to place, swipe to slide.</p>
-        </details>
-      </aside>
+      <footer class="tray">
+        <svg id="slot0" class="slot" aria-label="Piece 1"></svg>
+        <svg id="slot1" class="slot" aria-label="Piece 2"></svg>
+        <div class="next"><span>Next</span><svg id="next" class="preview"></svg></div>
+        <button id="tapBtn" class="tap-btn">Tap<b id="taps">1</b></button>
+      </footer>
+      <p class="hint">Drag a piece to a side of the board. Tap a piece to rotate it.</p>
     </main>
+    <svg id="drag" class="drag" xmlns="http://www.w3.org/2000/svg"></svg>
+    <dialog id="help">
+      <h1>Slidewinder</h1>
+      <p>Remove all cores before the time runs out. Cores are bolted to the board and never move.</p>
+      <ul>
+        <li>Drag one of your two pieces to a side of the board. It enters from that side, and all tiles slide away from you, as in 2048. Outlines show where the cells land.</li>
+        <li>Tap a piece to rotate it. The piece you play is replaced by the next piece.</li>
+        <li>Two tiles of the same color and value that meet merge, and the value doubles.</li>
+        <li>A same-color group whose values add up to 5 or more is removed. The tiles then slide again, which can start a chain.</li>
+        <li>After each move, gray stones appear on the side the piece came from. Stones do not match or merge. A match removes the stones next to it.</li>
+        <li>A chain of 2 or more gives a tap. A tap removes any group of 2 or more.</li>
+        <li>Time left at the end of a level gives bonus points. The game ends when time runs out or no piece fits.</li>
+      </ul>
+      <p class="keys">Keys: 1/2 choose a piece, Z/X rotate, arrows choose the slide direction, Q/E move along the side, Space play, T tap mode.</p>
+      <div class="dialog-buttons">
+        <button id="newBtn">New game</button>
+        <button id="closeHelp" class="primary">Resume</button>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

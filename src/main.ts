@@ -1,153 +1,253 @@
 import './style.css';
-import { Game, SIZE, stonesPerTurn, type Dir } from './game';
-import { Renderer, drawPreview } from './render';
+import { Game, SIZE, LEVEL_TIME, offsetRange, type Dir, type Move } from './game';
+import { CELL, Renderer, coreRow, drawPreview, pieceBox, pieceMarkup } from './render';
 
 const $ = <T extends Element>(id: string) => document.getElementById(id) as unknown as T;
 
 const board = $<SVGSVGElement>('board');
+const dragEl = $<SVGSVGElement>('drag');
 const overlay = $<HTMLDivElement>('overlay');
+const intro = $<HTMLDivElement>('intro');
+const help = $<HTMLDialogElement>('help');
 const tapBtn = $<HTMLButtonElement>('tapBtn');
+const slotEls = [$<SVGSVGElement>('slot0'), $<SVGSVGElement>('slot1')];
 const game = new Game();
 const renderer = new Renderer(board);
-let hover: { r: number; c: number } | null = null;
-let tapMode = false;
-let down: { x: number; y: number } | null = null;
-let panelVersion = -1;
 
-const ready = () => !renderer.busy;
+let tapMode = false;
+let introUntil = 0;
+let seenLevelStart = -1;
+let panelVersion = -1;
+let drag: { slot: number; id: number; x: number; y: number; moved: boolean; touch: boolean; move: Move | null } | null = null;
+/** Keyboard play: chosen slot, slide direction and offset. */
+const kb: { slot: number; dir: Dir | null; offset: number } = { slot: 0, dir: null, offset: 0 };
+
+/** Board lanes (rows or columns) that the piece enters by. */
+function lanesOf(move: Move): number[] {
+  const piece = game.slots[move.slot];
+  const across = move.dir === 'left' || move.dir === 'right';
+  return [...new Set(piece.cells.map((c) => (across ? c.y : c.x) + move.offset))];
+}
+
+/** Shows the landing preview. Returns true if the move is legal. */
+function preview(move: Move | null): boolean {
+  if (!move) {
+    renderer.showPreview(null, null, []);
+    return false;
+  }
+  const landing = game.preview(move);
+  renderer.showPreview(landing, move.dir, lanesOf(move));
+  return landing !== null;
+}
+
+function play(move: Move): void {
+  if (game.play(move)) {
+    introUntil = 0;
+    intro.classList.remove('show');
+  }
+  preview(null);
+}
+
+function clampOffset(slot: number, dir: Dir, offset: number): number {
+  const [lo, hi] = offsetRange(game.slots[slot], dir);
+  return Math.min(hi, Math.max(lo, offset));
+}
+
+// Dragging a piece from the tray. The side of the board nearest the piece sets the slide direction.
+function moveFromPointer(slot: number, pivotX: number, pivotY: number): Move | null {
+  const { x, y } = renderer.toCells(pivotX, pivotY);
+  if (x < -2 || y < -2 || x > SIZE + 2 || y > SIZE + 2) return null;
+  const sides: [number, Dir][] = [[x, 'right'], [SIZE - x, 'left'], [y, 'down'], [SIZE - y, 'up']];
+  const dir = sides.reduce((a, b) => (b[0] < a[0] ? b : a))[1];
+  const lane = Math.floor(dir === 'left' || dir === 'right' ? y : x);
+  return { slot, dir, offset: clampOffset(slot, dir, lane) };
+}
+
+function updateDrag(e: PointerEvent): void {
+  if (!drag) return;
+  const box = pieceBox(game.slots[drag.slot]);
+  const scale = renderer.cellPx() / CELL;
+  // On touch the piece floats above the finger, so the finger does not hide it.
+  const cx = e.clientX;
+  const cy = e.clientY - (drag.touch ? (box.h * scale) / 2 + 24 : 0);
+  dragEl.style.left = `${cx - (box.w * scale) / 2}px`;
+  dragEl.style.top = `${cy - (box.h * scale) / 2}px`;
+  const pivotX = cx + (-box.x - box.w / 2 + CELL / 2) * scale;
+  const pivotY = cy + (-box.y - box.h / 2 + CELL / 2) * scale;
+  drag.move = moveFromPointer(drag.slot, pivotX, pivotY);
+  dragEl.classList.toggle('bad', !preview(drag.move));
+}
+
+function startDrag(): void {
+  if (!drag) return;
+  const piece = game.slots[drag.slot];
+  const box = pieceBox(piece);
+  const scale = renderer.cellPx() / CELL;
+  dragEl.setAttribute('viewBox', `${box.x} ${box.y} ${box.w} ${box.h}`);
+  dragEl.style.width = `${box.w * scale}px`;
+  dragEl.style.height = `${box.h * scale}px`;
+  dragEl.innerHTML = pieceMarkup(piece);
+  dragEl.classList.add('on');
+  slotEls[drag.slot].classList.add('dragging');
+}
+
+function endDrag(): void {
+  if (drag) slotEls[drag.slot].classList.remove('dragging');
+  drag = null;
+  dragEl.classList.remove('on');
+  preview(null);
+}
+
+slotEls.forEach((el, slot) => {
+  el.addEventListener('pointerdown', (e) => {
+    if (game.phase !== 'play' || drag) return;
+    e.preventDefault();
+    setTapMode(false);
+    drag = { slot, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, touch: e.pointerType !== 'mouse', move: null };
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag || drag.id !== e.pointerId) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
+      drag.moved = true;
+      startDrag();
+    }
+    if (drag.moved) updateDrag(e);
+  });
+  el.addEventListener('pointerup', (e) => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const { moved, move } = drag;
+    endDrag();
+    if (!moved) game.rotateSlot(slot);
+    else if (move) play(move);
+  });
+  el.addEventListener('pointercancel', endDrag);
+});
 
 function setTapMode(on: boolean): void {
-  tapMode = on && game.taps > 0 && game.phase === 'place';
+  tapMode = on && game.taps > 0 && game.phase === 'play';
   board.classList.toggle('tap-mode', tapMode);
   tapBtn.classList.toggle('active', tapMode);
 }
 
-function continueAfterEnd(): boolean {
-  if (game.phase === 'won') game.startLevel(game.level + 1);
-  else if (game.phase === 'lost') game.newGame();
-  else return false;
-  return true;
-}
-
-// Swipes are allowed during animations. The renderer queues the new frames.
-function swipe(dir: Dir): void {
-  game.swipe(dir);
-}
-
+tapBtn.addEventListener('click', () => setTapMode(!tapMode));
 board.addEventListener('pointerdown', (e) => {
-  down = { x: e.clientX, y: e.clientY };
-  hover = renderer.cellAt(e);
-  board.setPointerCapture(e.pointerId);
-});
-board.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse' || down) hover = renderer.cellAt(e);
-});
-board.addEventListener('pointerleave', (e) => {
-  if (e.pointerType === 'mouse') hover = null;
-});
-board.addEventListener('pointerup', (e) => {
-  const start = down;
-  down = null;
-  if (!start || continueAfterEnd()) return;
-  const dx = e.clientX - start.x;
-  const dy = e.clientY - start.y;
-  if (game.phase === 'swipe') {
-    const arrow = (e.target as Element).closest<SVGGElement>('.arrow');
-    if (arrow) swipe(arrow.dataset.dir as Dir);
-    else if (Math.max(Math.abs(dx), Math.abs(dy)) > 24) {
-      swipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up');
-    }
-    return;
-  }
-  if (!ready()) return;
-  const { r, c } = renderer.cellAt(e);
-  if (tapMode || e.button === 2) {
-    game.tap(r, c);
-    setTapMode(false);
-  } else if (e.button === 0) {
-    game.place(r, c);
-  }
-  if (e.pointerType !== 'mouse') hover = null;
+  if (!tapMode) return;
+  const { x, y } = renderer.toCells(e.clientX, e.clientY);
+  game.tap(Math.floor(y), Math.floor(x));
+  setTapMode(false);
 });
 board.addEventListener('contextmenu', (e) => e.preventDefault());
-board.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  game.rotate(e.deltaY > 0 ? 1 : -1);
-}, { passive: false });
+
+function continueAfterEnd(): void {
+  if (game.phase === 'won') game.startLevel(game.level + 1);
+  else if (game.phase === 'lost') game.newGame();
+}
 overlay.addEventListener('click', continueAfterEnd);
 
-const KEY_DIRS: Record<string, Dir> = {
-  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-  w: 'up', s: 'down', a: 'left', d: 'right',
-};
+$('helpBtn').addEventListener('click', () => help.showModal());
+$('closeHelp').addEventListener('click', () => help.close());
+$('newBtn').addEventListener('click', () => {
+  help.close();
+  setTapMode(false);
+  game.newGame();
+});
+
+const KEY_DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+
+function kbMove(): Move | null {
+  return kb.dir ? { slot: kb.slot, dir: kb.dir, offset: clampOffset(kb.slot, kb.dir, kb.offset) } : null;
+}
 
 window.addEventListener('keydown', (e) => {
+  if (help.open) return;
+  if (game.phase !== 'play') {
+    if (e.key === ' ' || e.key === 'Enter') continueAfterEnd();
+    return;
+  }
   const dir = KEY_DIRS[e.key];
-  if (game.phase === 'swipe' && dir) {
-    swipe(dir);
-  } else if (game.phase === 'place' && dir) {
-    // Arrow keys move the placement cursor.
-    const h = hover ?? { r: SIZE / 2, c: SIZE / 2 - 1 };
-    const [dr, dc] = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[dir];
-    hover = { r: Math.min(SIZE - 1, Math.max(0, h.r + dr)), c: Math.min(SIZE - 1, Math.max(0, h.c + dc)) };
+  if (dir) {
+    if (kb.dir !== dir) kb.offset = SIZE / 2 - 1;
+    kb.dir = dir;
   } else {
     switch (e.key) {
+      case '1': case '2': kb.slot = Number(e.key) - 1; break;
+      case 'q': case 'Q': kb.offset = Math.max(0, kb.offset - 1); break;
+      case 'e': case 'E': kb.offset = Math.min(SIZE - 1, kb.offset + 1); break;
+      case 'z': case 'Z': game.rotateSlot(kb.slot, -1); break;
+      case 'x': case 'X': case 'r': case 'R': game.rotateSlot(kb.slot, 1); break;
+      case 't': case 'T': setTapMode(!tapMode); break;
+      case 'Escape': kb.dir = null; break;
       case ' ':
-      case 'Enter':
-        if (!continueAfterEnd() && hover && ready()) {
-          if (tapMode) {
-            game.tap(hover.r, hover.c);
-            setTapMode(false);
-          } else game.place(hover.r, hover.c);
+      case 'Enter': {
+        const move = kbMove();
+        if (move && game.preview(move)) {
+          play(move);
+          kb.dir = null;
         }
         break;
-      case 'z': case 'Z': game.rotate(-1); break;
-      case 'x': case 'X': case 'r': case 'R': game.rotate(1); break;
-      case 'c': case 'C': game.swapHold(); break;
-      case 't': case 'T': setTapMode(!tapMode); break;
+      }
       default: return;
     }
   }
   e.preventDefault();
+  if (kb.dir) kb.offset = clampOffset(kb.slot, kb.dir, kb.offset);
+  slotEls.forEach((el, i) => el.classList.toggle('selected', !!kb.dir && i === kb.slot));
+  preview(kbMove());
 });
 
-$('rotateBtn').addEventListener('click', () => game.rotate(1));
-$('holdBtn').addEventListener('click', () => game.swapHold());
-tapBtn.addEventListener('click', () => setTapMode(!tapMode));
-$('newBtn').addEventListener('click', () => {
-  game.newGame();
-  setTapMode(false);
-});
+function showIntro(now: number): void {
+  const cores = game.coreTiles().map((t) => t.color);
+  intro.innerHTML = `<div class="intro-level">Level ${game.level}</div>
+    <div class="intro-goal">Remove all ${cores.length}</div>${coreRow(cores)}`;
+  intro.classList.remove('show');
+  void intro.offsetWidth; // restart the CSS animation
+  intro.classList.add('show');
+  introUntil = now + 2200;
+}
+
+function formatTime(s: number): string {
+  const t = Math.ceil(s);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
 
 function updatePanel(): void {
+  const bar = $<HTMLDivElement>('timerBar');
+  bar.style.width = `${(game.timeLeft / LEVEL_TIME) * 100}%`;
+  bar.classList.toggle('low', game.timeLeft <= 15);
   if (panelVersion === game.version) return;
   panelVersion = game.version;
   $('score').textContent = game.score.toLocaleString('en');
   $('level').textContent = String(game.level);
   $('cores').textContent = String(game.coresLeft());
-  $('stones').textContent = String(stonesPerTurn(game.level));
-  $('chain').textContent = game.chain > 1 ? `×${game.chain}` : '–';
-  $('hint').textContent = game.phase === 'swipe' ? 'Swipe or use an arrow to slide all tiles' : 'Place the piece';
-  tapBtn.textContent = `Tap (${game.taps})`;
+  $('taps').textContent = String(game.taps);
+  $('timerText').textContent = formatTime(game.timeLeft);
   tapBtn.disabled = game.taps === 0;
-  drawPreview($('piece'), game.current);
-  drawPreview($('next0'), game.next[0]);
-  drawPreview($('next1'), game.next[1]);
-  drawPreview($('hold'), game.hold);
+  slotEls.forEach((el, i) => drawPreview(el, game.slots[i]));
+  drawPreview($('next'), game.next);
 }
 
 function updateOverlay(): void {
-  const end = (game.phase === 'won' || game.phase === 'lost') && ready();
+  const end = (game.phase === 'won' || game.phase === 'lost') && !renderer.busy;
   if (end && overlay.hidden) {
+    const score = game.score.toLocaleString('en');
     overlay.innerHTML = game.phase === 'won'
-      ? `<h2>Level ${game.level} clear</h2><p>Score ${game.score.toLocaleString('en')}</p><p>Click to continue</p>`
-      : `<h2>No room for the piece</h2><p>Score ${game.score.toLocaleString('en')}</p><p>Click to start again</p>`;
+      ? `<h2>Level ${game.level} clear</h2><p>Time bonus +${game.lastBonus.toLocaleString('en')}</p><p>Score ${score}</p><p class="cta">Tap to continue</p>`
+      : `<h2>${game.lostReason === 'time' ? "Time's up" : 'No room for any piece'}</h2><p>Level ${game.level} · Score ${score}</p><p class="cta">Tap to play again</p>`;
   }
   overlay.hidden = !end;
 }
 
-function frame(): void {
-  renderer.update(game, hover, tapMode);
+let last = performance.now();
+function frame(now: number): void {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (game.levelStarts !== seenLevelStart) {
+    seenLevelStart = game.levelStarts;
+    showIntro(now);
+  }
+  if (!help.open && !document.hidden && now > introUntil) game.tick(dt);
+  renderer.update(game);
   updatePanel();
   updateOverlay();
   requestAnimationFrame(frame);
