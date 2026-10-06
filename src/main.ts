@@ -105,14 +105,36 @@ function endDrag(): void {
   preview(null);
 }
 
-slotEls.forEach((el, slot) => {
-  el.addEventListener('pointerdown', (e) => {
-    if (game.phase !== 'play' || drag) return;
-    e.preventDefault();
-    setTapMode(false);
-    drag = { slot, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, touch: e.pointerType !== 'mouse', move: null };
-    el.setPointerCapture(e.pointerId);
+// A press near the pieces grabs the nearest one: the gap between them, a strip above the tray, and everything below it
+// down to the screen edge count, so a finger that lands just outside a piece still drags it.
+const GRAB_MARGIN = 24;
+function slotAt(e: PointerEvent): number {
+  const t = e.target as Element;
+  if (t.closest('button, dialog, #overlay')) return -1;
+  const first = slotEls[0].getBoundingClientRect(), last = slotEls[slotEls.length - 1].getBoundingClientRect();
+  if (e.clientY < first.top - GRAB_MARGIN || e.clientX < first.left - GRAB_MARGIN || e.clientX > last.right + GRAB_MARGIN) return -1;
+  let best = -1, bestD = Infinity;
+  slotEls.forEach((el, i) => {
+    const r = el.getBoundingClientRect(), d = Math.abs(e.clientX - Math.min(r.right, Math.max(r.left, e.clientX)));
+    if (d < bestD) { bestD = d; best = i; }
   });
+  return best;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (game.phase !== 'play' || drag) return;
+  const slot = slotAt(e);
+  if (slot < 0) return;
+  e.preventDefault();
+  setTapMode(false);
+  drag = { slot, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, touch: e.pointerType !== 'mouse', move: null };
+  slotEls[slot].setPointerCapture(e.pointerId);
+});
+// A finger moving anywhere outside a dialog never scrolls or bounces the page.
+document.addEventListener('touchmove', (e) => {
+  if (!(e.target as Element).closest('dialog')) e.preventDefault();
+}, { passive: false });
+
+slotEls.forEach((el, slot) => {
   el.addEventListener('pointermove', (e) => {
     if (!drag || drag.id !== e.pointerId) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
