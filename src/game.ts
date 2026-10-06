@@ -77,6 +77,8 @@ export class Game {
   version = 0;
   /** Increments when a level starts. */
   levelStarts = 0;
+  /** True during the tutorial: no timer, no stones and no end of the game. */
+  scripted = false;
   private frames: Frame[] = [];
   private nextId = 1;
   private stoneDebt = 0;
@@ -103,6 +105,7 @@ export class Game {
         if (!this.grid[r][c] && this.rand() < START_FILL) this.putSafe(r, c, this.rand() < 0.2 ? 2 : 1, false);
       }
     }
+    this.scripted = false;
     this.chain = 0;
     this.stoneDebt = 0;
     this.timeLeft = LEVEL_TIME;
@@ -116,6 +119,25 @@ export class Game {
     this.changed();
   }
 
+  /** Sets a fixed board for the tutorial. Rows use r, b, g, y for colors, upper case for cores and . for empty. */
+  loadScripted(rows: string[], slots: Piece[], next: Piece, taps: number): void {
+    this.grid = rows.map((row) => [...row].map((ch) => {
+      const color = 'rbgy'.indexOf(ch.toLowerCase());
+      return color < 0 ? null : this.tile(color, 1, ch !== ch.toLowerCase());
+    }));
+    this.slots = slots;
+    this.next = next;
+    this.taps = taps;
+    this.score = 0;
+    this.chain = 0;
+    this.timeLeft = LEVEL_TIME;
+    this.lostReason = null;
+    this.phase = 'play';
+    this.scripted = true;
+    this.frames.push({ tiles: this.snapshot(), popped: [] });
+    this.changed();
+  }
+
   coreTiles(): Tile[] {
     return this.grid.flat().filter((t): t is Tile => !!t?.core);
   }
@@ -125,7 +147,7 @@ export class Game {
   }
 
   tick(dt: number): void {
-    if (this.phase !== 'play') return;
+    if (this.phase !== 'play' || this.scripted) return;
     const before = Math.ceil(this.timeLeft);
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     if (this.timeLeft === 0) {
@@ -175,7 +197,7 @@ export class Game {
     const points = value * group.length * 10 + extra;
     this.score += points;
     this.frames.push({ tiles: this.snapshot(), popped, score: { points, chain: 1, ...this.center(group) } });
-    this.checkWin();
+    if (!this.scripted) this.checkWin();
     this.changed();
     return true;
   }
@@ -239,7 +261,7 @@ export class Game {
     }
     this.chain = step;
     if (step >= 2) this.taps++;
-    if (!this.checkWin()) {
+    if (!this.scripted && !this.checkWin()) {
       this.addStones(dir);
       if (!this.canPlay()) {
         this.phase = 'lost';

@@ -130,6 +130,7 @@ export class Renderer {
   private tiles: SVGGElement;
   private ghost: SVGGElement;
   private fx: SVGGElement;
+  private tut: SVGGElement;
   private queue: Frame[] = [];
   private playing = false;
 
@@ -143,11 +144,13 @@ export class Renderer {
       <rect x="-6" y="-6" width="${W + 12}" height="${W + 12}" rx="12" class="frame"/>
       <g class="slots">${slots}</g>
       <g clip-path="url(#board-clip)"><g id="tiles"></g></g>
+      <g id="tut"></g>
       <g id="ghost"></g>
       <g id="fx"></g>`;
     this.tiles = svg.querySelector('#tiles')!;
     this.ghost = svg.querySelector('#ghost')!;
     this.fx = svg.querySelector('#fx')!;
+    this.tut = svg.querySelector('#tut')!;
   }
 
   get busy(): boolean {
@@ -193,6 +196,21 @@ export class Renderer {
         <rect x="2" y="2" width="${CELL - 4}" height="${CELL - 4}" rx="7" class="landing-edge"/></g>`;
     }
     this.ghost.innerHTML = s;
+  }
+
+  /** Tutorial marks: the lanes a piece must enter by, and cells to tap. */
+  showTutorial(target: { dir: Dir; lanes: number[] } | null, cells: [number, number][]): void {
+    let s = '';
+    if (target) {
+      for (const lane of target.lanes) {
+        const across = target.dir === 'left' || target.dir === 'right';
+        s += across
+          ? `<rect x="-${PAD}" y="${lane * CELL}" width="${W + PAD * 2}" height="${CELL}" class="tut-lane"/>`
+          : `<rect x="${lane * CELL}" y="-${PAD}" width="${CELL}" height="${W + PAD * 2}" class="tut-lane"/>`;
+      }
+    }
+    for (const [r, c] of cells) s += `<rect x="${c * CELL + 1}" y="${r * CELL + 1}" width="${CELL - 2}" height="${CELL - 2}" rx="6" class="tut-cell"/>`;
+    this.tut.innerHTML = s;
   }
 
   private playNext(): void {

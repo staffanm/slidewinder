@@ -19,7 +19,8 @@ Live at https://slidewinder.tomtebo.org/. It installs as a PWA (Add to Home Scre
 - `src/game.ts`: rules, levels and stones (no DOM)
 - `src/pieces.ts`: piece shapes
 - `src/render.ts`: SVG drawing and animation
-- `src/main.ts`: input and the side panel
+- `src/main.ts`: input, dragging, the score bar and the tray
+- `src/tutorial.ts`: the first-run tutorial (a fixed practice board and its steps)
 - `src/style.css`: styles
 - `scripts/icon.svg`: source of the app icon and favicon
 - `scripts/render-icons.mjs`: `npm run icons` renders the icon to the PNG files in `public/` (needs a Playwright Chromium)

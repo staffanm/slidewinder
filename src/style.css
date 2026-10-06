@@ -262,9 +262,42 @@ dialog {
 }
 dialog::backdrop { background: #000a; }
 dialog h1 { margin: 0 0 8px; font-size: 22px; }
+dialog h2 { margin: 14px 0 4px; font-size: 15px; color: var(--accent); }
+dialog a { color: #82b1ff; }
 dialog ul { padding-left: 18px; }
 dialog li { margin-bottom: 4px; }
 dialog .keys { color: var(--muted); font-size: 12px; }
-.dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.dialog-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 .dialog-buttons button { border-radius: 8px; padding: 8px 14px; }
 .dialog-buttons .primary { background: var(--accent); color: #222; }
+
+/* Tutorial: the instructions take the place of the score bar and the timer. */
+.tut { display: none; }
+body.tutorial .hud, body.tutorial .timer, body.tutorial .hint { display: none; }
+body.tutorial .tut {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-height: 70px;
+}
+.tut p { margin: 0; font-size: 14px; line-height: 1.3; }
+.tut b { color: var(--accent); }
+.tut-count { align-self: start; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tut-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.tut-buttons:empty { display: none; }
+.tut-buttons button { border-radius: 8px; padding: 4px 12px; font-size: 13px; }
+.tut-buttons .primary { background: var(--accent); color: #222; font-weight: 700; }
+.tut.shake { animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+.tut-focus { outline: 3px solid var(--accent); outline-offset: 2px; animation: focus 1s ease-in-out infinite; }
+@keyframes focus { 50% { outline-color: transparent; } }
+.tut-lane { fill: var(--accent); opacity: .16; }
+.tut-cell { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 6 4; animation: march 1s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -20; } }

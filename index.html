@@ -27,8 +27,9 @@
         <div class="stat"><span>Level</span><b id="level">1</b></div>
         <div class="stat"><span>Score</span><b id="score">0</b></div>
         <div class="stat"><span>Cores</span><b id="cores">0</b></div>
-        <button id="helpBtn" class="icon-btn" aria-label="Help and new game">?</button>
+        <button id="helpBtn" class="icon-btn" aria-label="About and help">?</button>
       </header>
+      <div id="tut" class="tut" aria-live="polite"></div>
       <div class="timer" role="timer"><div id="timerBar"></div><span id="timerText">1:30</span></div>
       <div class="board-wrap">
         <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -46,18 +47,27 @@
     <svg id="drag" class="drag" xmlns="http://www.w3.org/2000/svg"></svg>
     <dialog id="help">
       <h1>Slidewinder</h1>
-      <p>Remove all cores before the time runs out. Cores are bolted to the board and never move.</p>
+      <p>A puzzle game that mixes old favorites: piece shapes from Tetris, the slide and merge of 2048,
+        color groups from SameGame, and fixed targets from Dr. Mario. Remove all cores before the time runs out.</p>
+      <h2>How to play</h2>
       <ul>
-        <li>Drag one of your two pieces to a side of the board. It enters from that side, and all tiles slide away from you, as in 2048. Outlines show where the cells land.</li>
+        <li>Drag one of your two pieces to a side of the board. It enters from that side, and all tiles slide away from you. Outlines show where the cells land.</li>
         <li>Tap a piece to rotate it. The piece you play is replaced by the next piece.</li>
         <li>Two tiles of the same color and value that meet merge, and the value doubles.</li>
         <li>A same-color group whose values add up to 5 or more is removed. The tiles then slide again, which can start a chain.</li>
-        <li>After each move, gray stones appear on the side the piece came from. Stones do not match or merge. A match removes the stones next to it.</li>
+        <li>Cores are bolted to the board and never move. A match removes them.</li>
+        <li>After each move, gray stones appear on the side the piece came from. A match removes the stones next to it.</li>
         <li>A chain of 2 or more gives a tap. A tap removes any group of 2 or more.</li>
         <li>Time left at the end of a level gives bonus points. The game ends when time runs out or no piece fits.</li>
       </ul>
       <p class="keys">Keys: 1/2 choose a piece, Z/X rotate, arrows choose the slide direction, Q/E move along the side, Space play, T tap mode.</p>
+      <h2>How it was built</h2>
+      <p>Slidewinder was designed and written in a conversation with Claude, an AI model by Anthropic, in Claude Code.
+        It is TypeScript built with Vite. All graphics are SVG drawn from code, with no game engine and no image files.
+        A test bot that tries every possible move set the difficulty of the levels.
+        The source is on <a href="https://github.com/staffanm/slidewinder" target="_blank" rel="noopener">GitHub</a>.</p>
       <div class="dialog-buttons">
+        <button id="tutorialBtn">Replay tutorial</button>
         <button id="newBtn">New game</button>
         <button id="closeHelp" class="primary">Resume</button>
       </div>

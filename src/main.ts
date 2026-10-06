@@ -1,6 +1,7 @@
 import './style.css';
 import { Game, SIZE, LEVEL_TIME, offsetRange, type Dir, type Move } from './game';
 import { CELL, Renderer, coreRow, drawPreview, pieceBox, pieceMarkup } from './render';
+import { Tutorial, tutorialDone } from './tutorial';
 
 const $ = <T extends Element>(id: string) => document.getElementById(id) as unknown as T;
 
@@ -13,6 +14,7 @@ const tapBtn = $<HTMLButtonElement>('tapBtn');
 const slotEls = [$<SVGSVGElement>('slot0'), $<SVGSVGElement>('slot1')];
 const game = new Game();
 const renderer = new Renderer(board);
+const tutorial = new Tutorial(game, renderer, () => game.newGame());
 
 let tapMode = false;
 let introUntil = 0;
@@ -41,7 +43,12 @@ function preview(move: Move | null): boolean {
 }
 
 function play(move: Move): void {
+  if (!tutorial.allow({ type: 'play', move })) {
+    preview(null);
+    return;
+  }
   if (game.play(move)) {
+    tutorial.did({ type: 'play', move });
     introUntil = 0;
     intro.classList.remove('show');
   }
@@ -109,6 +116,7 @@ slotEls.forEach((el, slot) => {
   el.addEventListener('pointermove', (e) => {
     if (!drag || drag.id !== e.pointerId) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
+      if (!tutorial.allow({ type: 'drag', slot })) return;
       drag.moved = true;
       startDrag();
     }
@@ -118,11 +126,17 @@ slotEls.forEach((el, slot) => {
     if (!drag || drag.id !== e.pointerId) return;
     const { moved, move } = drag;
     endDrag();
-    if (!moved) game.rotateSlot(slot);
+    if (!moved) rotate(slot, 1);
     else if (move) play(move);
   });
   el.addEventListener('pointercancel', endDrag);
 });
+
+function rotate(slot: number, dir: 1 | -1): void {
+  if (!tutorial.allow({ type: 'rotate', slot })) return;
+  game.rotateSlot(slot, dir);
+  tutorial.did({ type: 'rotate', slot });
+}
 
 function setTapMode(on: boolean): void {
   tapMode = on && game.taps > 0 && game.phase === 'play';
@@ -130,11 +144,20 @@ function setTapMode(on: boolean): void {
   tapBtn.classList.toggle('active', tapMode);
 }
 
-tapBtn.addEventListener('click', () => setTapMode(!tapMode));
+function toggleTapMode(): void {
+  if (tapMode) setTapMode(false);
+  else if (tutorial.allow({ type: 'tapMode' })) {
+    setTapMode(true);
+    tutorial.did({ type: 'tapMode' });
+  }
+}
+
+tapBtn.addEventListener('click', toggleTapMode);
 board.addEventListener('pointerdown', (e) => {
   if (!tapMode) return;
   const { x, y } = renderer.toCells(e.clientX, e.clientY);
-  game.tap(Math.floor(y), Math.floor(x));
+  const a = { type: 'tap', r: Math.floor(y), c: Math.floor(x) } as const;
+  if (tutorial.allow(a) && game.tap(a.r, a.c)) tutorial.did(a);
   setTapMode(false);
 });
 board.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -145,12 +168,23 @@ function continueAfterEnd(): void {
 }
 overlay.addEventListener('click', continueAfterEnd);
 
-$('helpBtn').addEventListener('click', () => help.showModal());
+$('helpBtn').addEventListener('click', () => {
+  help.showModal();
+  // The dialog focuses its first link, which can scroll it to the bottom.
+  (document.activeElement as HTMLElement | null)?.blur();
+  help.scrollTop = 0;
+});
 $('closeHelp').addEventListener('click', () => help.close());
 $('newBtn').addEventListener('click', () => {
   help.close();
   setTapMode(false);
-  game.newGame();
+  if (tutorial.active) tutorial.skip();
+  else game.newGame();
+});
+$('tutorialBtn').addEventListener('click', () => {
+  help.close();
+  setTapMode(false);
+  tutorial.start();
 });
 
 const KEY_DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -174,9 +208,9 @@ window.addEventListener('keydown', (e) => {
       case '1': case '2': kb.slot = Number(e.key) - 1; break;
       case 'q': case 'Q': kb.offset = Math.max(0, kb.offset - 1); break;
       case 'e': case 'E': kb.offset = Math.min(SIZE - 1, kb.offset + 1); break;
-      case 'z': case 'Z': game.rotateSlot(kb.slot, -1); break;
-      case 'x': case 'X': case 'r': case 'R': game.rotateSlot(kb.slot, 1); break;
-      case 't': case 'T': setTapMode(!tapMode); break;
+      case 'z': case 'Z': rotate(kb.slot, -1); break;
+      case 'x': case 'X': case 'r': case 'R': rotate(kb.slot, 1); break;
+      case 't': case 'T': toggleTapMode(); break;
       case 'Escape': kb.dir = null; break;
       case ' ':
       case 'Enter': {
@@ -242,7 +276,7 @@ let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (game.levelStarts !== seenLevelStart) {
+  if (game.levelStarts !== seenLevelStart && !tutorial.active) {
     seenLevelStart = game.levelStarts;
     showIntro(now);
   }
@@ -252,4 +286,5 @@ function frame(now: number): void {
   updateOverlay();
   requestAnimationFrame(frame);
 }
+if (!tutorialDone()) tutorial.start();
 requestAnimationFrame(frame);
