@@ -209,6 +209,19 @@ $('tutorialBtn').addEventListener('click', () => {
   tutorial.start();
 });
 
+// Block text selection and zoom. iOS Safari ignores user-scalable=no, so pinch and double-tap need these too.
+const block = (e: Event) => e.preventDefault();
+for (const type of ['selectstart', 'gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(type, block);
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+document.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) e.preventDefault(); // trackpad pinch on desktop
+}, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '0'].includes(e.key)) e.preventDefault();
+});
+
 const KEY_DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
 function kbMove(): Move | null {

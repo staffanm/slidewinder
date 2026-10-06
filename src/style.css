@@ -10,7 +10,16 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; }
+/* No text selection, long-press menu or tap flash anywhere, so that a long press or drag always moves a piece. */
+*, *::before, *::after {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* No pinch or double-tap zoom. The help dialog can still scroll. */
+html, body { height: 100%; touch-action: none; }
 
 body {
   margin: 0;
@@ -18,9 +27,6 @@ body {
   color: var(--text);
   font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
   overscroll-behavior: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
 }
 
 /* One column that fits the screen height: header, timer, board, tray. */
@@ -258,7 +264,8 @@ dialog {
   border-radius: 14px;
   padding: 16px 20px;
   font-size: 14px;
-  user-select: text;
+  overflow-y: auto;
+  touch-action: pan-y;
 }
 dialog::backdrop { background: #000a; }
 dialog h1 { margin: 0 0 8px; font-size: 22px; }
