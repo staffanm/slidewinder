@@ -1,0 +1,17 @@
+{
+  "name": "Slidewinder",
+  "short_name": "Slidewinder",
+  "description": "Puzzle game: place pieces, slide all tiles as in 2048, and merge and match colors to clear the cores.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#13152a",
+  "theme_color": "#13152a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
